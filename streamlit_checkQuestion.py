@@ -1,65 +1,67 @@
 import streamlit as st
 from PIL import Image
+import io
 import base64
+import os
 from openai import OpenAI
+import time
 
-# OpenAI APIキーの設定（Streamlit Secretsから）
+# OpenAI APIキーの読み込み (.streamlit/secrets.toml に保存済み)
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Streamlit画面設定
-st.set_page_config(page_title="歯科医師国家試験・問題校正", layout="centered")
-st.title("🦷 歯科医師国家試験｜問題画像から校正チェック（GPT-4o VISION）")
+st.set_page_config(page_title="国家試験問題チェック", layout="wide")
+st.title("歯科医師国家試験画像チェックアプリ")
 
-# アップロード欄
-uploaded_file = st.file_uploader("📄 歯科医師国家試験の問題画像をアップロードしてください", type=["png", "jpg", "jpeg"])
+uploaded_files = st.file_uploader("試験問題の画像を50枚までアップロードしてください", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="アップロードされた画像", use_column_width=True)
+if uploaded_files:
+    for i, uploaded_file in enumerate(uploaded_files[:50]):
+        st.markdown(f"### 📄 ファイル {i+1}: `{uploaded_file.name}` の解析結果")
 
-    with st.spinner("🔍 GPT-4o Visionで解析・校正中..."):
+        # 画像を表示
+        image = Image.open(uploaded_file)
+        st.image(image, caption=f"アップロード画像 {i+1}", use_column_width=True)
 
-        # base64形式にエンコード
-        image_bytes = uploaded_file.getvalue()
-        base64_image = base64.b64encode(image_bytes).decode()
+        # 画像をBase64に変換
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        img_bytes = buffered.getvalue()
+        img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
-        # OpenAI Vision APIへのリクエスト
-        response = client.chat.completions.create(
-            model="gpt-4o-2024-11-20",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "あなたは歯科医師国家試験問題の校正者です。"
-                },
-                {
-                    "role": "user",
-                    "content": [
+        # GPT-4oへ送信
+        try:
+            with st.spinner("GPTで解析中..."):
+                response = client.chat.completions.create(
+                    model="gpt-4o-2024-11-20",
+                    messages=[
                         {
-                            "type": "text",
-                            "text": """この画像には複数の歯科医師国家試験問題が含まれています。
-それぞれの問題について、以下の3点を実行してください。
-
-1. 問題文が医学的・論理的に妥当かどうかをチェックしてください。
-2. 誤字脱字や選択肢の形式ミスがないかを確認し、修正案があれば出してください。
-3. 国家試験問題として適切な形式か（設問構造・選択肢の体裁）を評価してください。
-
-各問題ごとに見やすく整理して出力してください。"""
+                            "role": "system",
+                            "content": "あなたは歯科医師国家試験問題の専門家です。画像から読み取った国家試験の問題文・選択肢・正解を校正・評価してください。"
                         },
                         {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "以下は試験問題画像です。問題文、選択肢、正答が問題として成立しているか、校正ミスがないか、正答が妥当かを確認し、全体の評価と解説を出力してください。"
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/png;base64,{img_base64}"
+                                    }
+                                }
+                            ]
                         }
-                    ]
-                }
-            ],
-            temperature=0.2,
-            max_tokens=4096
-        )
+                    ],
+                    temperature=0.3,
+                    max_tokens=1500
+                )
 
-        # 結果出力
-        result = response.choices[0].message.content
+                result = response.choices[0].message.content
+                st.success("✅ 解析完了")
+                st.markdown("#### 評価結果")
+                st.markdown(result)
 
-    st.subheader("📘 校正結果")
-    st.markdown(result)
+        except Exception as e:
+            st.error(f"エラーが発生しました: {str(e)}")
