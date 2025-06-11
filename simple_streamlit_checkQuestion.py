@@ -9,7 +9,7 @@ client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # Streamlit画面設定
 st.set_page_config(page_title="問題校正", layout="centered")
-st.title("🦷 Simple問題画像から校正チェック（GPT-4o VISION）")
+st.title("🦷 作成問題画像の校正チェック（GPT-4o VISION）simple_streamlit_checkQuestion.py")
 
 # アップロード欄
 uploaded_file = st.file_uploader("📄 歯科医師国家試験の問題画像をアップロードしてください", type=["png", "jpg", "jpeg"])
